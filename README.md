@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MarketScout
 
-## Getting Started
+**An autonomous AI agent that finds your next clients.**
 
-First, run the development server:
+[Live demo](https://market-scout-teal.vercel.app)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+<!-- Screenshot: nahraj ho do složky docs/ a odkomentuj další řádek
+![MarketScout](docs/marketscout.png)
+-->
+
+Describe what you offer and who you are looking for. MarketScout searches the web, verifies official websites, reads them, scores every lead and drafts a personal outreach email, live in front of you.
+
+## What it does
+
+1. **Takes your brief.** You describe your service and the type of client you want (for example: "I build modern websites and AI chatbots for small businesses" and "Independent coffee shops in Ottawa, Canada").
+2. **Searches the live web** for matching businesses.
+3. **Verifies official websites**, so leads are real businesses and not random listings.
+4. **Reads each website** to understand what the business does.
+5. **Scores every lead** by how well it fits your offer.
+6. **Drafts a personal email** for each lead.
+
+Everything happens live, so you can watch the agent work. A run usually takes 30 to 60 seconds.
+
+```mermaid
+flowchart LR
+    A[Your offer + target clients] --> B[Search the web]
+    B --> C[Verify official websites]
+    C --> D[Read the websites]
+    D --> E[Score every lead]
+    E --> F[Draft personal emails]
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Try it
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open the [live demo](https://market-scout-teal.vercel.app) and use one of the ready examples (coffee shops in Ottawa, pizzerias in Calgary, dentists in Toronto) or write your own.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+> The free demo is limited to 3 runs per hour.
 
-## Learn More
+## Tech stack
 
-To learn more about Next.js, take a look at the following resources:
+- **Next.js** and **TypeScript**
+- AI agent with live web search
+- Hosted on **Vercel**
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Run locally
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+git clone https://github.com/bodie-codes/MarketScout-Autonomous-LeadGen-Agent.git
+cd MarketScout-Autonomous-LeadGen-Agent
+npm install
+npm run dev
+```
 
-## Deploy on Vercel
+Then open <http://localhost:3000>.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+<!-- Sem doplň názvy proměnných z .env (klíč k AI a k vyhledávání), nikdy ne jejich hodnoty -->
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Author
+
+Built by **Bodie** · [bodiecodes.com](https://www.bodiecodes.com) · [LinkedIn](https://www.linkedin.com/in/bodiecodes)
