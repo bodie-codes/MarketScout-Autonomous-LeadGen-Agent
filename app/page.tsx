@@ -277,9 +277,11 @@ export default function Home() {
         body: JSON.stringify({ offer, target }),
       });
 
+      // Problems found before the agent started (invalid input, usage limit) come back as JSON
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => null);
         setError(data?.error ?? 'Something went wrong. Please try again.');
+        setSteps([]);
         return;
       }
 
@@ -316,7 +318,7 @@ export default function Home() {
       {/* Navigation */}
       <nav className="relative border-b border-white/[0.06]">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <span className="flex items-center gap-2 text-lg">
+          <span className="flex items-center gap-2 text-lg" translate="no">
             <span className="relative flex w-2.5 h-2.5">
               <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
               <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-emerald-400" />
@@ -342,8 +344,9 @@ export default function Home() {
             <span className="text-emerald-400">Let the agent do the research.</span>
           </h1>
           <p className="mt-6 text-lg text-slate-400 leading-relaxed">
-            Describe what you offer and who you&apos;re looking for. MarketScout searches the web, verifies official
-            websites, reads them, scores every lead and drafts a personal email, live in front of you.
+            Describe what you offer and who you&apos;re looking for. <span translate="no">MarketScout</span> searches
+            the web, verifies official websites, reads them, scores every lead and drafts a personal email, live in
+            front of you.
           </p>
         </header>
 
@@ -403,7 +406,9 @@ export default function Home() {
             >
               {running ? 'Agent is working…' : 'Find leads →'}
             </button>
-            <p className="text-xs text-slate-500">Searches the live web · usually takes 30–60 seconds</p>
+            <p className="text-xs text-slate-500">
+              Searches the live web · usually takes 30–60 seconds · free demo: 3 runs per hour
+            </p>
           </div>
         </section>
 
@@ -542,8 +547,8 @@ export default function Home() {
                 text: 'One role gathers information, a second role scores leads and writes emails as structured JSON, validated with Zod and self-corrected on failure.',
               },
               {
-                title: 'Live streaming & resilience',
-                text: 'Every step is streamed to the browser as it happens. Invalid model output, failed searches and unreadable websites never crash the run.',
+                title: 'Live streaming, resilience & rate limits',
+                text: 'Every step is streamed as it happens. Invalid model output and unreadable websites never crash the run, and Redis-backed rate limits protect the budget.',
               },
             ].map((item) => (
               <div key={item.title} className={`${CARD} p-6`}>
@@ -557,9 +562,9 @@ export default function Home() {
         {/* Footer */}
         <footer className="mt-24 mb-10 pt-8 border-t border-white/[0.06] flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <span>
-            Built by <span className="font-semibold text-slate-300">Bodie Codes</span>
+            Built by <span className="font-semibold text-slate-300" translate="no">Bodie Codes</span>
           </span>
-          <span>Next.js · TypeScript · Groq LLM · Tavily Search · Zod</span>
+          <span translate="no">Next.js · TypeScript · Groq LLM · Tavily Search · Upstash Redis · Zod</span>
         </footer>
       </div>
     </main>

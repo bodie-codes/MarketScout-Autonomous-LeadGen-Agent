@@ -221,6 +221,7 @@ export async function runScoutAgent(
   const searchResults: SearchResult[] = [];
   const pages: PageContent[] = [];
   const seenDomains = new Set<string>(); // every domain that appeared anywhere
+  const attemptedDomains = new Set<string>(); // websites we already tried to read (even if it failed)
   const verified: { company: string; website: string }[] = []; // confirmed official websites
 
   // --- Tool: broad web search (to discover business names) ---
@@ -301,21 +302,26 @@ export async function runScoutAgent(
     return JSON.stringify(found);
   }
 
-  // --- Tool: read websites (only ones the research really found) ---
+  // --- Tool: read websites (only ones the research really found, each at most once) ---
   async function handleRead(args: Record<string, unknown>): Promise<string> {
     if (readsUsed >= MAX_READS) return "Reading budget used up. Call finish_research now.";
 
-    const alreadyRead = new Set(pages.map((page) => domainOf(page.url)));
     const requested = (Array.isArray(args.urls) ? args.urls : []).map((url) => normalizeUrl(String(url).trim()));
     const urls = requested
       .filter((url) => {
         const domain = domainOf(url);
-        return domain !== null && seenDomains.has(domain) && !isBlocked(url) && !alreadyRead.has(domain);
+        return domain !== null && seenDomains.has(domain) && !isBlocked(url) && !attemptedDomains.has(domain);
       })
       .slice(0, MAX_URLS_PER_READ);
 
     if (urls.length === 0) {
-      return "None of these websites can be read. Only read websites returned by search_web or find_websites.";
+      return "None of these websites can be read (unknown or already tried). Read other websites or call finish_research.";
+    }
+
+    // Remember these websites, so we never try the same one twice
+    for (const url of urls) {
+      const domain = domainOf(url);
+      if (domain) attemptedDomains.add(domain);
     }
 
     readsUsed += 1;
@@ -422,16 +428,15 @@ export async function runScoutAgent(
     if (results.some((result) => result.finished)) break;
   }
 
-  // ===== Quality check: read verified websites the agent did not read yet =====
-  const readDomains = new Set(pages.map((page) => domainOf(page.url)));
-  const unread = verified
+  // ===== Quality check: read verified websites the agent has not tried yet =====
+  const untried = verified
     .map((item) => item.website)
-    .filter((website) => !readDomains.has(domainOf(website)))
+    .filter((website) => !attemptedDomains.has(domainOf(website) ?? ""))
     .slice(0, MAX_URLS_PER_READ);
 
-  if (unread.length > 0 && readsUsed < MAX_READS && pages.length < TARGET_LEADS) {
+  if (untried.length > 0 && readsUsed < MAX_READS && pages.length < TARGET_LEADS) {
     emit({ type: "status", message: "Reading the remaining verified websites…" });
-    await handleRead({ urls: unread });
+    await handleRead({ urls: untried });
   }
 
   if (searchResults.length === 0 && pages.length === 0 && verified.length === 0) {

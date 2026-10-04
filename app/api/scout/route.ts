@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runScoutAgent } from "@/lib/agent";
+import { checkLimits } from "@/lib/ratelimit";
 import type { AgentEvent } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +19,19 @@ const InputSchema = z.object({
     .max(200, "Please keep the target under 200 characters."),
 });
 
+// Finds out who the visitor is (by their internet address)
+function getVisitor(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.headers.get("x-real-ip") ?? "unknown";
+}
+
 export async function POST(req: Request) {
   if (!process.env.GROQ_API_KEY || !process.env.TAVILY_API_KEY) {
     return Response.json({ error: "The server is missing its API keys." }, { status: 500 });
   }
 
+  // 1. Check the input first (invalid input never uses up the visitor's limit)
   const body = await req.json().catch(() => null);
   const parsed = InputSchema.safeParse(body);
 
@@ -33,7 +42,21 @@ export async function POST(req: Request) {
     );
   }
 
-  // Run the agent and stream every step to the browser, one JSON message per line
+  // 2. Usage limits: protect the search and AI budget
+  try {
+    const problem = await checkLimits(getVisitor(req));
+    if (problem) {
+      return Response.json({ error: problem }, { status: 429 });
+    }
+  } catch (error) {
+    console.error("[MarketScout] rate limit check failed:", error);
+    return Response.json(
+      { error: "The live demo is temporarily unavailable. Please try again later." },
+      { status: 503 }
+    );
+  }
+
+  // 3. Run the agent and stream every step to the browser, one JSON message per line
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
