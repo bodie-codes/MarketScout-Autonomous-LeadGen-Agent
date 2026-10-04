@@ -1,220 +1,203 @@
 'use client';
-
-import { useChat } from '@ai-sdk/react';
-import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import type { AgentEvent, AgentStats, Lead } from '@/lib/types';
 
-export default function MarketScout() {
-  const chat = useChat({
-    api: '/api/chat',
-    onError: (err) => console.error('[Frontend Error]:', err),
-  });
+type Step = { id: string; label: string; detail?: string; status: 'working' | 'done' | 'failed' };
 
-  const [localText, setLocalText] = useState('');
+export default function Home() {
+  const [offer, setOffer] = useState('I build modern websites and AI chatbots for small businesses.');
+  const [target, setTarget] = useState('Independent coffee shops in Ottawa, Canada');
+  const [running, setRunning] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [stats, setStats] = useState<AgentStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSend = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!localText.trim()) return;
-
-    const messageText = localText;
-    setLocalText('');
-
-    const chatInstance = chat as any;
-    if (typeof chatInstance.sendMessage === 'function') {
-      chatInstance.sendMessage({ text: messageText });
-    } else if (typeof chatInstance.append === 'function') {
-      chatInstance.append({ role: 'user', content: messageText });
+  // Reacts to one live message from the agent
+  const handleEvent = (event: AgentEvent) => {
+    if (event.type === 'status') {
+      setStatus(event.message);
+    } else if (event.type === 'tool') {
+      setSteps((prev) => {
+        const step: Step = { id: event.id, label: event.label, detail: event.detail, status: event.status };
+        return prev.some((s) => s.id === event.id)
+          ? prev.map((s) => (s.id === event.id ? step : s))
+          : [...prev, step];
+      });
+    } else if (event.type === 'result') {
+      setLeads(event.leads);
+      setStats(event.stats);
+      setStatus(null);
+    } else if (event.type === 'error') {
+      setError(event.error);
+      setStatus(null);
     }
   };
 
-  const isSending = chat.status === 'submitted' || chat.status === 'streaming';
-  const chatMessages = chat.messages || [];
+  const runAgent = async () => {
+    setRunning(true);
+    setStatus('Starting the agent…');
+    setSteps([]);
+    setLeads([]);
+    setStats(null);
+    setError(null);
 
-  // Extrakce textu ze všech možných struktur zpráv
-  const getMessageText = (m: any): string => {
-    if (!m) return '';
+    try {
+      const res = await fetch('/api/scout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offer, target }),
+      });
 
-    if (typeof m.content === 'string' && m.content.trim()) return m.content;
-    if (typeof m.text === 'string' && m.text.trim()) return m.text;
-
-    if (Array.isArray(m.parts)) {
-      const partsText = m.parts
-        .map((p: any) => {
-          if (typeof p === 'string') return p;
-          if (p?.type === 'text') return p.text || p.content || '';
-          if (p?.type === 'reasoning') return p.reasoning || p.text || '';
-          if (typeof p?.text === 'string') return p.text;
-          return '';
-        })
-        .filter(Boolean)
-        .join('\n');
-      if (partsText.trim()) return partsText;
-    }
-
-    if (Array.isArray(m.content)) {
-      const contentText = m.content
-        .map((p: any) => (typeof p === 'string' ? p : p?.text || p?.content || ''))
-        .filter(Boolean)
-        .join('\n');
-      if (contentText.trim()) return contentText;
-    }
-
-    return '';
-  };
-
-  // Extrakce průběhu nástrojů
-  const getMessageTools = (m: any): any[] => {
-    if (!m) return [];
-    const tools: any[] = [];
-
-    const add = (item: any) => {
-      if (!item) return;
-      const actual = item.toolInvocation || item;
-      if (actual.toolName || actual.toolCallId || actual.name || actual.args || actual.type === 'tool-invocation') {
-        tools.push(actual);
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? 'Something went wrong. Please try again.');
+        return;
       }
-    };
 
-    if (Array.isArray(m.toolInvocations)) m.toolInvocations.forEach(add);
-    if (Array.isArray(m.parts)) m.parts.forEach(add);
-    if (Array.isArray(m.content)) m.content.forEach(add);
+      // Read the live steps, one JSON message per line
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-    return tools;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (line.trim()) handleEvent(JSON.parse(line) as AgentEvent);
+        }
+      }
+    } catch {
+      setError('Could not reach the server. Please check your connection.');
+    } finally {
+      setRunning(false);
+      setStatus(null);
+    }
   };
 
   return (
-    <main className="min-h-screen bg-[#FAFAFA] text-slate-900 font-sans">
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">
-              Market<span className="font-light text-slate-500">Scout</span>
-            </h1>
-          </div>
-          <span className="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full">
-            Autonomous LeadGen Agent
-          </span>
-        </div>
-      </nav>
+    <main className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-4xl mx-auto px-6 py-16 space-y-10">
+        <header>
+          <p className="text-xs font-semibold tracking-[0.3em] text-emerald-400">MARKETSCOUT</p>
+          <h1 className="mt-3 text-4xl font-bold">Find your next clients with AI.</h1>
+          <p className="mt-2 text-slate-400">
+            Describe what you offer and who you're looking for. The agent searches the web,
+            reads company websites, scores every lead and drafts a personal email.
+          </p>
+        </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 pb-32">
-        {chatMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center mt-20 text-center space-y-4">
-            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-2">
-              <Bot className="w-8 h-8 text-indigo-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-slate-900">How can I help you prospect today?</h2>
-            <p className="text-slate-500 max-w-md">
-              Enter a company name, website, or LinkedIn profile. I'll analyze their business and craft a highly converting, personalized cold email.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {chatMessages.map((m) => {
-              const text = getMessageText(m);
-              const tools = getMessageTools(m);
-
-              return (
-                <div key={m.id} className={`flex gap-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {m.role !== 'user' && (
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-1">
-                      <Bot className="w-4 h-4 text-indigo-600" />
-                    </div>
-                  )}
-                  
-                  <div className={`flex flex-col gap-2 max-w-[80%] ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                    {/* Odznaky průzkumu webu */}
-                    {tools.map((tool, idx) => {
-                      const toolCallId = tool.toolCallId || tool.id || idx;
-                      const target = tool.args?.url || tool.args?.companyName || tool.args?.query || 'fiat.cz';
-                      const isDone = tool.state === 'result' || Boolean(tool.result) || tool.type === 'tool-result';
-
-                      return (
-                        <div key={toolCallId} className="flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-200 px-3.5 py-2 rounded-xl shadow-sm">
-                          {isDone ? (
-                            <>
-                              <Sparkles className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                              <span>Dokončený průzkum pro: <strong className="font-semibold text-slate-800">{target}</strong></span>
-                            </>
-                          ) : (
-                            <>
-                              <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin flex-shrink-0" />
-                              <span>Stahuji data z: <strong className="font-semibold text-slate-800">{target}</strong>...</span>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {/* Vykreslení textu e-mailu */}
-                    {text ? (
-                      <div 
-                        className={`px-5 py-4 rounded-2xl ${
-                          m.role === 'user' 
-                            ? 'bg-slate-900 text-white rounded-br-none' 
-                            : 'bg-white border border-slate-100 shadow-sm rounded-bl-none text-slate-700 whitespace-pre-wrap'
-                        }`}
-                      >
-                        {text}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {m.role === 'user' && (
-                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 mt-1">
-                      <User className="w-4 h-4 text-slate-600" />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {isSending && (
-              <div className="flex gap-4 justify-start">
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-1">
-                  <Bot className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-500 bg-white border border-slate-100 px-4 py-3 rounded-2xl shadow-sm">
-                  <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-                  <span>MarketScout analyzuje firmu a píše e-mail...</span>
-                </div>
-              </div>
-            )}
-
-            {chat.error && (
-              <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">
-                Chyba při komunikaci s agentem: {chat.error.message}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-[#FAFAFA] via-[#FAFAFA] to-transparent pt-10 pb-6">
-        <div className="max-w-4xl mx-auto px-6">
-          <form 
-            onSubmit={handleSend}
-            className="bg-white border border-slate-200 rounded-2xl shadow-lg flex items-center p-2 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all"
-          >
-            <input
-              value={localText}
-              onChange={(e) => setLocalText(e.target.value)}
-              placeholder="e.g., Target: Stripe (stripe.com)..."
-              className="flex-1 px-4 py-3 bg-transparent outline-none text-slate-900 placeholder:text-slate-400"
-              disabled={isSending}
+        {/* Input */}
+        <section className="space-y-4">
+          <label className="block">
+            <span className="text-sm text-slate-400">What do you offer?</span>
+            <textarea
+              value={offer}
+              onChange={(e) => setOffer(e.target.value)}
+              maxLength={300}
+              rows={2}
+              className="mt-1 w-full rounded-xl bg-slate-900 border border-slate-800 p-3 focus:outline-none focus:border-emerald-500"
             />
-            <button
-              type="submit"
-              disabled={isSending || !localText.trim()} 
-              className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          </form>
-        </div>
+          </label>
+          <label className="block">
+            <span className="text-sm text-slate-400">Who are you looking for?</span>
+            <input
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              maxLength={200}
+              className="mt-1 w-full rounded-xl bg-slate-900 border border-slate-800 p-3 focus:outline-none focus:border-emerald-500"
+            />
+          </label>
+          <button
+            onClick={runAgent}
+            disabled={running}
+            className="rounded-xl bg-emerald-500 text-slate-950 font-semibold px-6 py-3 hover:bg-emerald-400 disabled:opacity-50 cursor-pointer"
+          >
+            {running ? 'Agent is working…' : 'Find leads →'}
+          </button>
+        </section>
+
+        {/* Live agent activity */}
+        {(steps.length > 0 || status) && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+            <h2 className="text-sm font-semibold tracking-wide text-slate-400 mb-4">AGENT ACTIVITY</h2>
+            <ul className="space-y-3">
+              {steps.map((step) => (
+                <li key={step.id} className="flex gap-3">
+                  <span className="w-5">
+                    {step.status === 'working' ? '⏳' : step.status === 'done' ? '✅' : '⚠️'}
+                  </span>
+                  <div>
+                    <p className="text-sm">{step.label}</p>
+                    {step.detail && <p className="text-xs text-slate-500 mt-0.5">{step.detail}</p>}
+                  </div>
+                </li>
+              ))}
+              {status && (
+                <li className="flex gap-3 text-sm text-emerald-400 animate-pulse">
+                  <span className="w-5">🧠</span>
+                  {status}
+                </li>
+              )}
+            </ul>
+          </section>
+        )}
+
+        {/* Error */}
+        {error && (
+          <p className="rounded-xl border border-rose-900 bg-rose-950/50 text-rose-300 p-4 text-sm">{error}</p>
+        )}
+
+        {/* Results */}
+        {leads.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-2xl font-bold">{leads.length} leads found</h2>
+              {stats && (
+                <p className="text-xs text-slate-500">
+                  {stats.searches} searches · {stats.pagesRead} websites read · {(stats.durationMs / 1000).toFixed(1)}s
+                </p>
+              )}
+            </div>
+
+            {leads.map((lead) => (
+              <article key={lead.website} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">{lead.company}</h3>
+                    <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-400 hover:underline">
+                      {lead.website}
+                    </a>
+                  </div>
+                  <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm font-bold px-3 py-1">
+                    {lead.score}/100
+                  </span>
+                </div>
+
+                <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
+                  {lead.reasons.map((reason, i) => (
+                    <li key={i}>{reason}</li>
+                  ))}
+                </ul>
+
+                <div className="rounded-xl bg-slate-950 border border-slate-800 p-4">
+                  <p className="text-xs text-slate-500 mb-1">Subject: {lead.emailSubject}</p>
+                  <p className="text-sm text-slate-300 whitespace-pre-wrap">{lead.emailBody}</p>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(`Subject: ${lead.emailSubject}\n\n${lead.emailBody}`)}
+                    className="mt-3 text-xs font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                  >
+                    Copy email
+                  </button>
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
       </div>
     </main>
   );
